@@ -2,18 +2,18 @@
 #include <stdlib.h>
 #include <limits.h>
 #include <pthread.h>
-#define Thread_NUM 2//Ïß³ÌÊı
+#define Thread_NUM 2//çº¿ç¨‹æ•°
 
 struct Para_type {
-    int n;
+    int n;  //ä»€ä¹ˆç”¨
     int** adj;
     int* dist;
     int* visited;
-    int begin, end;
-    int select;
+    int begin, end; //ä»1~n
+    int* select;
 };
 
-void thread(void* arg)
+void* thread(void* arg)
 {
     struct Para_type* ar = (struct Para_type*)arg;
     int n = ar->n;
@@ -22,25 +22,39 @@ void thread(void* arg)
     int* visited = ar->visited;
     int begin = ar->begin;
     int end = ar->end;
-    int select = ar->select;
+    int select = *(ar->select); 
+    int* select_p = ar->select; //ç”¨æŒ‡é’ˆè¿”å›selectç»“æœ
+
+    int j, i;
 
     /*********  Begin  **********/
-    //¸üĞÂselect¶¥µãÁÚ¾ÓµÄ¾àÀë
+    //æ›´æ–°selecté¡¶ç‚¹é‚»å±…çš„è·ç¦»
+    for(j=begin-1;j<end;j++){//æ›´æ–°é‚»å±…è·ç¦»
+        if(adj[select][j]!=-1&&dist[select]+adj[select][j]<dist[j])
+            dist[j]=dist[select]+adj[select][j];
+    }
 
-    //ÔÚÎª·ÃÎÊ¶¥µãÖĞÑ¡ÔñÒ»¸ö¾àÀë×î½üµÄ¶¥µã
 
+    //åœ¨ä¸ºè®¿é—®é¡¶ç‚¹ä¸­é€‰æ‹©ä¸€ä¸ªè·ç¦»æœ€è¿‘çš„é¡¶ç‚¹
+    int min_dist=INT_MAX;
+    for(i=begin-1;i<end;i++){//é€‰æ‹©æœ€è¿‘çš„é¡¶ç‚¹
+        if(!visited[i]&&dist[i]<min_dist){
+            min_dist=dist[i];
+            select=i;
+        }
+    }
+    *(select_p)=select;
     /*********  End  **********/
 
-    ar->select = select;
 }
 
 void computeSSSP(int** adj, int n) {
-    //nÎª¶¥µãÊı,adjÎªÒ»¸ön*nµÄ¶şÎ¬Êı×é
-    //adj[i][j]Îª¶¥µãiµ½¶¥µãjµÄ¾àÀë£¬Èôadj[i][j]Îª-1£¬±íÊ¾ÎŞ·¨´ÓiÖ±½Óµ½´ïj
-    //´ËÍâ£¬adj[i][j]Óëadj[j][i]Î´±ØÏàµÈ
-    int source = 0;//ÉèÖÃ¶¥µã0ÎªÔ´µã
-    int* dist = (int*)malloc(n * sizeof(int));//dist[i]±íÊ¾¶¥µãiÓë¶¥µã0µÄ¾àÀë
-    int* visited = (int*)malloc(n * sizeof(int));//visited[i]±íÊ¾¶¥µãiÊÇ·ñÒÑ·ÃÎÊ
+    //nä¸ºé¡¶ç‚¹æ•°,adjä¸ºä¸€ä¸ªn*nçš„äºŒç»´æ•°ç»„
+    //adj[i][j]ä¸ºé¡¶ç‚¹iåˆ°é¡¶ç‚¹jçš„è·ç¦»ï¼Œè‹¥adj[i][j]ä¸º-1ï¼Œè¡¨ç¤ºæ— æ³•ä»iç›´æ¥åˆ°è¾¾j
+    //æ­¤å¤–ï¼Œadj[i][j]ä¸adj[j][i]æœªå¿…ç›¸ç­‰
+    int source = 0;//è®¾ç½®é¡¶ç‚¹0ä¸ºæºç‚¹
+    int* dist = (int*)malloc(n * sizeof(int));//dist[i]è¡¨ç¤ºé¡¶ç‚¹iä¸é¡¶ç‚¹0çš„è·ç¦»
+    int* visited = (int*)malloc(n * sizeof(int));//visited[i]è¡¨ç¤ºé¡¶ç‚¹iæ˜¯å¦å·²è®¿é—®
 
     int i, j;
     for (i = 0;i < n;i++) {
@@ -55,15 +69,40 @@ void computeSSSP(int** adj, int n) {
     }
     int select = source;
     int count = 0;
+
+    int min_dist;
+
+    pthread_t tid[Thread_NUM];  //çº¿ç¨‹å·
+    int select_p[Thread_NUM];   //çº¿ç¨‹çš„å±€éƒ¨æœ€çŸ­
+    struct Para_type a={n, adj, dist, visited, 0, 0, NULL}; //åä¸‰ä¸ªéœ€è¦å˜
+    int begin;  //æ¯æ¬¡çš„èµ·å§‹
+    int step = n/2+1;
     while (count < n) {
         /*********  Begin  **********/
-        //ÀûÓÃ¶àÏß³Ì£¬ÊµÏÖÃ¿¸öÏß³ÌÑ¡ÔñÁËÒ»¸ö¾Ö²¿×î½üµÄ¶¥µã£¬Ñ¡ÔñĞèÒªÔÚÆäÖĞÑ¡ÔñÒ»¸öÈ«¾Ö×î½üµÄ¶¥µã
+        //åˆ©ç”¨å¤šçº¿ç¨‹ï¼Œå®ç°æ¯ä¸ªçº¿ç¨‹é€‰æ‹©äº†ä¸€ä¸ªå±€éƒ¨æœ€è¿‘çš„é¡¶ç‚¹ï¼Œé€‰æ‹©éœ€è¦åœ¨å…¶ä¸­é€‰æ‹©ä¸€ä¸ªå…¨å±€æœ€è¿‘çš„é¡¶ç‚¹
+        begin = 1;
+        for(i=0;i<Thread_NUM;i++){
+            select_p[i] = select;
+            a.begin = begin;
+            begin+=step;
+            a.end = (begin-1<n)?(begin-1):n;
+            a.select = &(select_p[i]);
+            pthread_create(&(tid[i]), NULL, thread, &a);
+        }
+        min_dist=INT_MAX;
+        for(i=0;i<Thread_NUM;i++){
+            pthread_join(tid[i], NULL);
+            if(dist[select_p[i]]<min_dist){
+                min_dist=dist[select_p[i]];
+                select=select_p[i];
+            }
+        }
 
 
         /*********  End  **********/
 
-        visited[select] = 1;//¸üĞÂ×î½ü¶¥µãµÄ×´Ì¬ÎªÒÑ·ÃÎÊ
-        count++;//·ÃÎÊÊı¼ÓÒ»
+        visited[select] = 1;//æ›´æ–°æœ€è¿‘é¡¶ç‚¹çš„çŠ¶æ€ä¸ºå·²è®¿é—®
+        count++;//è®¿é—®æ•°åŠ ä¸€
     }
     for (i = 0;i < n;i++) {
         printf("%d", dist[i]);

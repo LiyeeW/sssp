@@ -78,12 +78,12 @@ void computeSSSP(int** adj, int n) {
     for(i=0;i<Thread_NUM;i++){
         a[i].n = n;
         a[i].adj = adj;
-        a[i].dist = a[i].dist;
+        a[i].dist = dist;
         a[i].visited = visited;
     }
     
     int begin;  //每次的起始
-    int step = n/Thread_NUM+(n%Thread_NUM)?1:0; //一个线程的跨度
+    int step = (n/Thread_NUM)+((n%Thread_NUM)?1:0); //一个线程的跨度
     while (count < n) {
         /*********  Begin  **********/
         //利用多线程，实现每个线程选择了一个局部最近的顶点，选择需要在其中选择一个全局最近的顶点
@@ -99,7 +99,7 @@ void computeSSSP(int** adj, int n) {
         min_dist=INT_MAX;
         for(i=0;i<Thread_NUM;i++){
             pthread_join(tid[i], NULL);
-            if(dist[select_p[i]]<min_dist){
+            if(!visited[select_p[i]]&&dist[select_p[i]]<min_dist){
                 min_dist=dist[select_p[i]];
                 select=select_p[i];
             }
